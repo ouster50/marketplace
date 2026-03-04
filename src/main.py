@@ -1,11 +1,50 @@
 import uuid
-from fastapi import FastAPI, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
-from src.database import get_db, ProductDB
 
+from fastapi import FastAPI, Depends, Query, status, Request
+from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+
+from sqlalchemy.orm import Session
+
+from src.database import get_db, ProductDB
 from src.generated import ProductStatus, ProductCreate, ProductUpdate, ProductResponse, PaginatedProductResponse
 
 app = FastAPI(title="Marketplace API")
+
+
+class APIException(Exception):
+    def __init__(self, status_code: int, error_code: str, message: str, details: dict = None):
+        self.status_code = status_code
+        self.error_code = error_code
+        self.message = message
+        self.details = details
+
+
+@app.exception_handler(APIException)
+def api_exception_handler(request: Request, exc: APIException):
+    content = {"error_code": exc.error_code, "message": exc.message}
+    if exc.details:
+        content["details"] = exc.details
+    return JSONResponse(status_code=exc.status_code, content=content)
+
+
+@app.exception_handler(RequestValidationError)
+def validation_exception_handler(request: Request, exc: RequestValidationError):
+    details = {}
+    for error in exc.errors():
+        field = ".".join(map(str, error["loc"]))
+        if field.startswith("body."):
+            field = field[5:]
+        details[field] = error["msg"]
+        
+    return JSONResponse(
+        status_code=400,
+        content={
+            "error_code": "VALIDATION_ERROR",
+            "message": "Ошибка валидации входных данных",
+            "details": details
+        }
+    )
 
 
 @app.get("/health")
@@ -32,7 +71,11 @@ def create_product(product_in: ProductCreate, db: Session = Depends(get_db)):
 def get_product(id: str, db: Session = Depends(get_db)):
     product = db.query(ProductDB).filter(ProductDB.id == id).first()
     if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
+        raise APIException(
+            status_code=404, 
+            error_code="PRODUCT_NOT_FOUND", 
+            message="Товар не найден по ID"
+        )
     return product
 
 
@@ -41,7 +84,7 @@ def get_products(
     page: int = Query(0, ge=0),
     size: int = Query(20, ge=1),
     status: ProductStatus = Query(None),
-    category: str = Query(None),
+    category: str = Query(None, min_length=1, max_length=100),
     db: Session = Depends(get_db)
 ):
     query = db.query(ProductDB)
@@ -51,6 +94,10 @@ def get_products(
         query = query.filter(ProductDB.category == category)
     total_elements = query.count()
     items = query.offset(page * size).limit(size).all()
+    items = [
+        ProductResponse.model_validate(item, from_attributes=True) 
+        for item in items
+    ]
     return PaginatedProductResponse(
         items=items,
         totalElements=total_elements,
@@ -63,7 +110,11 @@ def get_products(
 def update_product(id: str, product_in: ProductUpdate, db: Session = Depends(get_db)):
     product = db.query(ProductDB).filter(ProductDB.id == id).first()
     if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
+        raise APIException(
+            status_code=404, 
+            error_code="PRODUCT_NOT_FOUND", 
+            message="Товар не найден по ID"
+        )
     dump = product_in.model_dump(exclude_unset=True)
     if 'status' in dump and dump['status'] is not None:
         dump['status'] = dump['status'].value
@@ -78,7 +129,11 @@ def update_product(id: str, product_in: ProductUpdate, db: Session = Depends(get
 def delete_product(id: str, db: Session = Depends(get_db)):
     product = db.query(ProductDB).filter(ProductDB.id == id).first()
     if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
+        raise APIException(
+            status_code=404, 
+            error_code="PRODUCT_NOT_FOUND", 
+            message="Товар не найден по ID"
+        )
     product.status = "ARCHIVED"
     db.commit()
     return None

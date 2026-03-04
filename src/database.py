@@ -1,6 +1,7 @@
 import os
 from sqlalchemy import create_engine, Column, String, Text, Numeric, Integer, DateTime
 from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy.sql import func
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://user:password@db:5432/marketplace")
 
@@ -18,9 +19,8 @@ class ProductDB(Base):
     stock = Column(Integer, nullable=False)
     category = Column(String(100), nullable=False)
     status = Column(String, nullable=False, default='ACTIVE')
-
-    created_at = Column(DateTime(timezone=True))
-    updated_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now())
 
 def get_db():
     db = SessionLocal()

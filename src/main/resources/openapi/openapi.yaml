@@ -1,7 +1,6 @@
 openapi: 3.0.3
 info:
   title: Marketplace API
-  description: API сервиса маркетплейса с контрактным подходом и бизнес-логикой.
   version: 1.0.0
 
 paths:
@@ -17,51 +16,49 @@ paths:
               $ref: '#/components/schemas/ProductCreate'
       responses:
         '201':
-          description: Успешно создан новый товар
+          description: Успешно
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProductResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
 
     get:
-      summary: Список товаров с пагинацией и фильтрацией
+      summary: Список товаров
       operationId: getProducts
       parameters:
         - name: page
           in: query
-          description: Номер страницы (начиная с 0)
-          required: false
           schema:
             type: integer
             minimum: 0
             default: 0
         - name: size
           in: query
-          description: Размер страницы
-          required: false
           schema:
             type: integer
             minimum: 1
             default: 20
         - name: status
           in: query
-          description: Фильтрация по статусу товара
-          required: false
           schema:
             $ref: '#/components/schemas/ProductStatus'
         - name: category
           in: query
-          description: Фильтрация по точному совпадению категории
-          required: false
           schema:
             type: string
+            minLength: 1
+            maxLength: 100
       responses:
         '200':
-          description: Список товаров успешно получен
+          description: Успешно
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/PaginatedProductResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
 
   /products/{id}:
     get:
@@ -71,7 +68,6 @@ paths:
         - name: id
           in: path
           required: true
-          description: Идентификатор товара
           schema:
             type: string
             format: uuid
@@ -82,6 +78,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProductResponse'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
 
     put:
       summary: Обновление товара
@@ -106,10 +104,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProductResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
 
     delete:
       summary: Мягкое удаление товара
-      description: Переводит товар в статус ARCHIVED вместо физического удаления
       operationId: deleteProduct
       parameters:
         - name: id
@@ -120,64 +121,74 @@ paths:
             format: uuid
       responses:
         '204':
-          description: Товар успешно переведен в статус ARCHIVED
+          description: Товар успешно удален
+        '404':
+          $ref: '#/components/responses/NotFoundError'
 
 components:
+  responses:
+    ValidationError:
+      description: Ошибка валидации входных данных
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFoundError:
+      description: Сущность не найдена
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
   schemas:
+    ErrorResponse:
+      type: object
+      required:
+        - error_code
+        - message
+      properties:
+        error_code:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+          nullable: true
+
     ProductStatus:
       type: string
-      description: Состояния товара
-      enum:
-        - ACTIVE
-        - INACTIVE
-        - ARCHIVED
+      enum: [ACTIVE, INACTIVE, ARCHIVED]
 
     ProductCreate:
       type: object
-      description: Схема запроса на создание товара
-      required:
-        - name
-        - price
-        - stock
-        - category
+      required: [name, price, stock, category]
       properties:
         name:
           type: string
           minLength: 1
           maxLength: 255
-          description: Название товара
         description:
           type: string
           maxLength: 4000
           nullable: true
-          description: Описание товара
         price:
           type: number
           format: decimal
           minimum: 0.01
-          description: Цена товара (> 0)
         stock:
           type: integer
           minimum: 0
-          description: Остаток на складе (>= 0)
         category:
           type: string
           minLength: 1
           maxLength: 100
-          description: Категория товара
         status:
           $ref: '#/components/schemas/ProductStatus'
           default: ACTIVE
 
     ProductUpdate:
       type: object
-      description: Схема запроса на обновление товара
-      required:
-        - name
-        - price
-        - stock
-        - category
-        - status
+      required: [name, price, stock, category, status]
       properties:
         name:
           type: string
@@ -203,22 +214,10 @@ components:
 
     ProductResponse:
       type: object
-      description: Схема ответа с данными товара
-      required:
-        - id
-        - name
-        - price
-        - stock
-        - category
-        - status
-        - created_at
-        - updated_at
+      required: [id, name, price, stock, category, status, created_at, updated_at]
       properties:
         id:
           type: string
-          format: uuid
-          readOnly: true
-          description: Идентификатор товара
         name:
           type: string
         description:
@@ -236,34 +235,21 @@ components:
         created_at:
           type: string
           format: date-time
-          readOnly: true
-          description: Время создания
         updated_at:
           type: string
           format: date-time
-          readOnly: true
-          description: Время обновления
 
     PaginatedProductResponse:
       type: object
-      description: Список товаров с пагинацией
-      required:
-        - items
-        - totalElements
-        - page
-        - size
+      required: [items, totalElements, page, size]
       properties:
         items:
           type: array
           items:
             $ref: '#/components/schemas/ProductResponse'
-          description: Список товаров
         totalElements:
           type: integer
-          description: Общее количество элементов удовлетворяющих фильтрам
         page:
           type: integer
-          description: Номер текущей страницы
         size:
           type: integer
-          description: Размер страницы
