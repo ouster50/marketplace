@@ -141,6 +141,22 @@ components:
             $ref: '#/components/schemas/ErrorResponse'
 
   schemas:
+    ErrorCode:
+      type: string
+      description: Каталог машиночитаемых кодов ошибок
+      enum:
+        - PRODUCT_NOT_FOUND
+        - PRODUCT_INACTIVE
+        - ORDER_NOT_FOUND
+        - ORDER_LIMIT_EXCEEDED
+        - ORDER_HAS_ACTIVE
+        - INVALID_STATE_TRANSITION
+        - INSUFFICIENT_STOCK
+        - PROMO_CODE_INVALID
+        - PROMO_CODE_MIN_AMOUNT
+        - ORDER_OWNERSHIP_VIOLATION
+        - VALIDATION_ERROR
+
     ErrorResponse:
       type: object
       required:
@@ -148,7 +164,7 @@ components:
         - message
       properties:
         error_code:
-          type: string
+          $ref: '#/components/schemas/ErrorCode'
         message:
           type: string
         details:

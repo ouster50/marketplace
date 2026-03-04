@@ -7,13 +7,16 @@ from fastapi.exceptions import RequestValidationError
 from sqlalchemy.orm import Session
 
 from src.database import get_db, ProductDB
-from src.generated import ProductStatus, ProductCreate, ProductUpdate, ProductResponse, PaginatedProductResponse
+from src.generated import (
+    ProductStatus, ProductCreate, ProductUpdate, ProductResponse, PaginatedProductResponse,
+    ErrorCode, ErrorResponse
+)
 
 app = FastAPI(title="Marketplace API")
 
 
 class APIException(Exception):
-    def __init__(self, status_code: int, error_code: str, message: str, details: dict = None):
+    def __init__(self, status_code: int, error_code: ErrorCode, message: str, details: dict = None):
         self.status_code = status_code
         self.error_code = error_code
         self.message = message
@@ -22,10 +25,15 @@ class APIException(Exception):
 
 @app.exception_handler(APIException)
 def api_exception_handler(request: Request, exc: APIException):
-    content = {"error_code": exc.error_code, "message": exc.message}
-    if exc.details:
-        content["details"] = exc.details
-    return JSONResponse(status_code=exc.status_code, content=content)
+    error_response = ErrorResponse(
+        error_code=exc.error_code,
+        message=exc.message,
+        details=exc.details
+    )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=error_response.model_dump(mode='json', exclude_none=True)
+    )
 
 
 @app.exception_handler(RequestValidationError)
@@ -36,14 +44,14 @@ def validation_exception_handler(request: Request, exc: RequestValidationError):
         if field.startswith("body."):
             field = field[5:]
         details[field] = error["msg"]
-        
+    error_response = ErrorResponse(
+        error_code=ErrorCode.VALIDATION_ERROR,
+        message="Ошибка валидации входных данных",
+        details=details
+    )
     return JSONResponse(
         status_code=400,
-        content={
-            "error_code": "VALIDATION_ERROR",
-            "message": "Ошибка валидации входных данных",
-            "details": details
-        }
+        content=error_response.model_dump(mode='json', exclude_none=True)
     )
 
 
@@ -73,8 +81,8 @@ def get_product(id: str, db: Session = Depends(get_db)):
     if not product:
         raise APIException(
             status_code=404, 
-            error_code="PRODUCT_NOT_FOUND", 
-            message="Товар не найден по ID"
+            error_code=ErrorCode.PRODUCT_NOT_FOUND, 
+            message="Товар не найден"
         )
     return product
 
@@ -112,8 +120,8 @@ def update_product(id: str, product_in: ProductUpdate, db: Session = Depends(get
     if not product:
         raise APIException(
             status_code=404, 
-            error_code="PRODUCT_NOT_FOUND", 
-            message="Товар не найден по ID"
+            error_code=ErrorCode.PRODUCT_NOT_FOUND.value, 
+            message="Товар не найден"
         )
     dump = product_in.model_dump(exclude_unset=True)
     if 'status' in dump and dump['status'] is not None:
@@ -131,8 +139,8 @@ def delete_product(id: str, db: Session = Depends(get_db)):
     if not product:
         raise APIException(
             status_code=404, 
-            error_code="PRODUCT_NOT_FOUND", 
-            message="Товар не найден по ID"
+            error_code=ErrorCode.PRODUCT_NOT_FOUND.value, 
+            message="Товар не найден"
         )
     product.status = "ARCHIVED"
     db.commit()
